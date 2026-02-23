@@ -132,7 +132,7 @@ Example:
 getmusic artist update
 ```
 
-## Mode - Album / Single / Playlist
+### Mode - Album / Single / Playlist
 
 When artists do not have official releases, it's possible to download an album or a single or a playlists with this mode.
 I recommend using so via URLs that contain `playlist=...`.
@@ -142,7 +142,7 @@ Example:
 getmusic album <URL>
 ```
 
-## Mode - Song
+### Mode - Song
 
 This mode is intended for downloading a song.
 A single on YouTube Music is treated as a playlist (contains `playlist=` in the URL), while an individual song URL does not.
