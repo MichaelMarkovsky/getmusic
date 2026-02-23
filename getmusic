@@ -1,0 +1,214 @@
+#!/bin/bash
+
+# A simple bash script for downloading youtube music songs
+
+mode=$1
+
+
+# Archive for artists
+artists_file="$HOME/.config/yt-dlp/artists.csv"
+
+
+
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+PURPLE='\033[38;2;187;60;219m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color (reset)
+
+
+
+show_usage() {
+
+echo -e "${BOLD}getmusic - YouTube Music Downloader${NC}"
+cat << EOF
+
+USAGE:
+  getmusic <mode> [options]
+
+MODES:
+
+  artist list
+      List all saved artists.
+
+  artist add <channel_url>
+      Add an official artist channel (with /releases tab).
+
+  artist remove <index>
+      Remove artist by index (use 'artist list' to see numbers).
+
+  artist update
+      Update and download all saved artists.
+
+  album <url>
+      Download an album.
+
+  single <url>
+      Download a single release.
+
+  playlist <url>
+      Download a playlist.
+
+  song <url>
+      Download a single song (saved under /Singles).
+
+EXAMPLES:
+
+  getmusic artist add https://music.youtube.com/channel/UCxxxx
+  getmusic artist list
+  getmusic artist update
+  getmusic album https://music.youtube.com/playlist?list=OLAK5uy_xxxx
+  getmusic song https://www.youtube.com/watch?v=xxxxx
+
+EOF
+}
+
+
+# If no arguments were provided
+if [[ -z "$mode" ]]; then
+    show_usage
+    exit 0
+fi
+
+# Help flag
+if [[ "$mode" == "-h" || "$mode" == "--help" ]]; then
+    show_usage
+    exit 0
+fi
+
+
+# Check if uploader is not None (function)
+validate_url() {
+	local url="$1"
+	local uploader
+
+	uploader=$(yt-dlp --ignore-config --no-warnings --playlist-items 1 --print uploader "$url")
+	if [[ -z "$uploader" ]];then
+		echo -e "${YELLOW}Error: did not find uploader${NC}"
+		exit 1
+	fi
+
+	echo "$uploader"
+}
+
+
+
+case "$mode" in
+  "artist")
+  # Here i need to add /releases at the end of the url.
+  # Add the URL to 'artist.csv' file, for updating later.
+   	submode=$2
+	URL=$3
+	
+	# If file artists.csv was not found, crearte it:
+	if [ ! -f "$artists_file" ]; then
+		echo "Creating file: "$artists_file""
+		touch "$artists_file"
+	fi
+
+ 	case "$submode" in 
+  	# List which artists are saved
+	"list") 
+		index=1	
+
+		while IFS="," read -r artist url
+		do
+			echo -e " $index | ${PURPLE}$artist${NC} | $url"
+			((index++))
+		done < "$artists_file"
+		;;
+	
+	"add")
+		# Check if uploader is not None
+		uploader=$(validate_url "$URL")
+		
+		if yt-dlp --flat-playlist --playlist-items 1 "$URL/releases" > /dev/null 2>&1; then
+    			echo "Valid official artist, continuing.."
+		else
+    			echo -e "${YELLOW}This channel has no releases tab. Stopping..${NC}"
+    			exit 1
+		fi
+
+		# Check if the URL is already in the file
+		if grep -Fxq "${URL}/releases" "$artists_file";then
+			echo -e "${YELLOW}Error: URL is already registered.${NC}"
+			exit 1
+		fi
+
+		# Add artist
+		echo "$uploader","${URL}/releases" >>  "$artists_file" 
+		echo -e "${GREEN}'$uploader' has been added.${NC}"
+		
+		;;
+	"remove")
+		# Remove artist
+		# For simplicity perposes , you can delete a row via its index.
+		index=$3
+		
+		# Check if index is indeed a number
+		if ! [[ "$index" =~ ^[0-9]+$ ]]; then
+        		echo -e "${YELLOW}ERROR: The input is not an integer${NC}"
+			exit 1
+		fi
+
+		# Check if the index is exists
+		line_count=$(wc -l < "$artists_file")
+
+		if (( index < 1 || index > line_count )); then
+    			echo -e "${YELLOW}Error: index out of range${NC}"
+    			exit 1
+		fi
+
+
+		# Append
+		if ! sed -i "${index}d" "$artists_file"; then
+  			echo -e "${YELLOW}Error: failed to remove record #$index${NC}"
+  			exit 1
+		fi
+
+		echo "Removed artist #$index"
+		;;
+	 
+ 	"update")
+		# Read every line , which is artist name and url.
+		# Update each artist , downloads the whole releases of the artist.
+		# TLDR: Update my artists list.
+
+		while IFS="," read -r name url
+		do
+			echo "Updating "$name""
+			yt-dlp "$url" \
+			-o "$HOME/Music/$name/%(album,playlist_title)s/%(track_number,playlist_index)02d - %(title)s.%(ext)s"
+		done < "$artists_file"
+	;;
+	*)
+	  echo -e "${YELLOW}Error: Invalid option.${NC}"
+   	 ;;
+	esac
+
+	;;
+ "album" | "single" | "playlist")
+	URL=$2
+	
+	uploader=$(validate_url "$URL")
+
+   	# Here i download the URL normally
+	yt-dlp \
+	"$URL" \
+	-o "$HOME/Music/$uploader/%(album,playlist_title)s/%(track_number,playlist_index)02d - %(title)s.%(ext)s"
+   ;;
+ "song")
+	URL=$2
+
+	uploader=$(validate_url "$URL")
+
+   	# Since this is not a playlist, the output is different, the song will not have a folder. 
+	yt-dlp \
+	"$URL" \
+	-o "$HOME/Music/$uploader/Singles/%(title)s.%(ext)s"
+   ;;
+ *)
+   echo -e "${YELLOW}Error: Invalid option${NC}"
+   ;;
+esac
